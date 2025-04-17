@@ -4,10 +4,19 @@ import fs from 'fs'
 import path from 'path'
 
 export function getSwedishWeek(date = new Date()) {
-  const week = new Intl.DateTimeFormat('sv-SE', { week: 'numeric' }).format(
-    date
+  // Copy date so we don't modify original
+  const d = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
   )
-  return `${date.getFullYear()}-${week.padStart(2, '0')}`
+  // Set to nearest Thursday: current date + 4 - current day number (0=Sunday → 4=Thursday)
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
+
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  const weekNo = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
+  )
+
+  return `${d.getUTCFullYear()}-${String(weekNo).padStart(2, '0')}`
 }
 
 export function getFamilyForWeek(week: string): string {
