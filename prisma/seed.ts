@@ -53,34 +53,41 @@ const scheduleData = [
 
 async function main() {
   console.log('🌱 Starting seeding...')
+  const count = await prisma.weekAssignment.count()
 
-  for (const entry of scheduleData) {
-    // Ensure family exists
-    let family = await prisma.family.findFirst({
-      where: { name: entry.family },
-    })
+  if (count === 0) {
+    // Seed data if the table is empty
+    console.log('Seeding database with initial data...')
 
-    if (!family) {
-      family = await prisma.family.create({
+    for (const entry of scheduleData) {
+      // Ensure family exists
+      let family = await prisma.family.findFirst({
+        where: { name: entry.family },
+      })
+
+      if (!family) {
+        family = await prisma.family.create({
+          data: {
+            name: entry.family,
+            email: entry.email || `${entry.family.toLowerCase()}@example.com`,
+            phone: '+1234567890',
+            order: 0,
+          },
+        })
+      }
+
+      // Create the assignment
+      await prisma.weekAssignment.create({
         data: {
-          name: entry.family,
-          email: entry.email || `${entry.family.toLowerCase()}@example.com`,
-          phone: '+1234567890',
-          order: 0,
+          week: entry.week,
+          familyId: family.id,
         },
       })
     }
-
-    // Create the assignment
-    await prisma.weekAssignment.create({
-      data: {
-        week: entry.week,
-        familyId: family.id,
-      },
-    })
+    console.log('✅ Seed completed!')
+  } else {
+    console.log('💥 Database already contains data.')
   }
-
-  console.log('✅ Seed completed!')
 }
 
 main()

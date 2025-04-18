@@ -122,9 +122,11 @@ export default function BinBuddy() {
   // .filter((family, index) => index + 1 >= currentWeek)
   // Only show current and future assignments
 
-  const displayedAssignments = assignments
-    .filter((a) => a.week >= currentWeek)
-    .sort((a, b) => a.week - b.week)
+  const displayedAssignments = Array.isArray(assignments)
+    ? assignments
+        .filter((a) => a.week >= currentWeek)
+        .sort((a, b) => a.week - b.week)
+    : []
 
   // swaps
   //   .filter(
