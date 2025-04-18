@@ -1,8 +1,1 @@
-{
-  "/_app": "pages/_app.js",
-  "/_error": "pages/_error.js",
-  "/_document": "pages/_document.js",
-  "/": "pages/index.js",
-  "/api/schedule": "pages/api/schedule.js",
-  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js"
-}
+{"/_app":"pages/_app.js","/api/auth/[...nextauth]":"pages/api/auth/[...nextauth].js","/api/families":"pages/api/families.js","/api/schedule":"pages/api/schedule.js","/api/swap-request":"pages/api/swap-request.js","/api/swaps":"pages/api/swaps.js","/api/week-assignment":"pages/api/week-assignment.js","/":"pages/index.html","/_error":"pages/_error.js","/_document":"pages/_document.js","/404":"pages/404.html"}

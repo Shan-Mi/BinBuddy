@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  familyId      String?   @unique
+  Family        Family?   @relation(fields: [familyId], references: [id])
+}
+
+model Family {
+  id          String           @id @default(cuid())
+  name        String
+  email       String           
+  phone       String
+  order       Int
+  User        User?
+  assignments WeekAssignment[]
+  // Two sides of the relation to Swap model
+  swapsFrom   Swap[]           @relation("SwapFrom")
+  swapsTo     Swap[]           @relation("SwapTo")
+}
+
+model Swap {
+  id           String @id @default(cuid())
+  weekNumber   Int
+  fromFamilyId String
+  toFamilyId   String
+
+  fromFamily Family @relation("SwapFrom", fields: [fromFamilyId], references: [id])
+  toFamily   Family @relation("SwapTo", fields: [toFamilyId], references: [id])
+
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+}
+
+model WeekAssignment {
+  id        String   @id @default(cuid())
+  week      Int      @unique
+  familyId  String
+  family    Family   @relation(fields: [familyId], references: [id])
+  createdAt DateTime @default(now())
+}
