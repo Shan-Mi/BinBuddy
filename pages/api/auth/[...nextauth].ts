@@ -1,41 +1,40 @@
 import NextAuth from 'next-auth'
-import GoogleProvider from 'next-auth/providers/google'
+import EmailProvider from 'next-auth/providers/email'
+import { sendMagicLink } from '../send-magic-link'
 
 const allowedEmails = ['shan.mi.fanfan@gmail.com', 'fanfang2014@gmail.com'] // Optional: control who can log in
 
-// export default NextAuth({
-//   providers: [
-//     GoogleProvider({
-//       clientId: process.env.GOOGLE_CLIENT_ID!,
-//       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-//     }),
-//   ],
-//   callbacks: {
-//     async signIn({ user }) {
-//       return allowedEmails.includes(user.email ?? '') || false
-//     },
-//     async session({ session }) {
-//       return session
-//     },
-//   },
-// })
-
 export const authOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    EmailProvider({
+      server: {
+        host: 'smtp.sendgrid.net', // SMTP host for SendGrid
+        port: 587, // SMTP port for SendGrid
+        auth: {
+          user: 'apikey', // For SendGrid, use 'apikey' as the username
+          pass: process.env.SENDGRID_API_KEY, // Use your SendGrid API key here
+        },
+      },
+      from: process.env.SENDGRID_EMAIL_FROM, // Email to be used as sender
+      sendVerificationRequest: async ({ identifier: email, url, provider }) => {
+        // Send the magic link email via SendGrid
+        await sendMagicLink(email, url)
+      },
     }),
   ],
   callbacks: {
     async signIn({ user }) {
+      // Only allow sign-in for specific email addresses
       return allowedEmails.includes(user.email ?? '') || false
     },
     async session({ session }) {
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: '/auth/signin',
+  },
+  secret: process.env.NEXTAUTH_SECRET, // Secret for session management
 }
 
 export default NextAuth(authOptions)
