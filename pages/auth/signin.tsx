@@ -1,4 +1,3 @@
-// pages/auth/signin.tsx
 import { signIn } from 'next-auth/react'
 import { useState } from 'react'
 import { useRouter } from 'next/router'
@@ -20,7 +19,7 @@ const SignInPage = () => {
       setError(res.error)
     } else {
       // You can handle redirection after sign-in success
-      router.push('/dashboard') // Example redirection
+      router.push('/') // Example redirection
     }
 
     setLoading(false)

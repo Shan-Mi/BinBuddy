@@ -15,6 +15,7 @@ model User {
   image         String?
   familyId      String?   @unique
   Family        Family?   @relation(fields: [familyId], references: [id])
+  sessions      Session[]
 }
 
 model Family {
@@ -50,4 +51,20 @@ model WeekAssignment {
   familyId  String
   family    Family   @relation(fields: [familyId], references: [id])
   createdAt DateTime @default(now())
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }

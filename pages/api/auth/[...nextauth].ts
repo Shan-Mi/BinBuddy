@@ -1,8 +1,10 @@
 import NextAuth from 'next-auth'
 import EmailProvider from 'next-auth/providers/email'
+import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import { sendMagicLink } from '../send-magic-link'
+import { prisma } from '../../../prisma/client'
 
-const allowedEmails = ['shan.mi.fanfan@gmail.com', 'fanfang2014@gmail.com'] // Optional: control who can log in
+// const allowedEmails = ['shan.mi.fanfan@gmail.com', 'fanfang2014@gmail.com'] // Optional: control who can log in
 
 export const authOptions = {
   providers: [
@@ -22,15 +24,16 @@ export const authOptions = {
       },
     }),
   ],
-  callbacks: {
-    async signIn({ user }) {
-      // Only allow sign-in for specific email addresses
-      return allowedEmails.includes(user.email ?? '') || false
-    },
-    async session({ session }) {
-      return session
-    },
-  },
+  adapter: PrismaAdapter(prisma),
+  // callbacks: {
+  //   async signIn({ user }) {
+  //     // Only allow sign-in for specific email addresses
+  //     return allowedEmails.includes(user.email ?? '') || false
+  //   },
+  //   async session({ session }) {
+  //     return session
+  //   },
+  // },
   pages: {
     signIn: '/auth/signin',
   },
