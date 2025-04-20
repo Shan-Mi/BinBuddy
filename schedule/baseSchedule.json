@@ -1,4 +1,11 @@
 [
+  { "week": 1, "family": "12E", "email": "test@test.com" },
+  { "week": 2, "family": "12D", "email": "test@test.com" },
+  { "week": 3, "family": "12B", "email": "test@test.com" },
+  { "week": 4, "family": "10A", "email": "test@test.com" },
+  { "week": 5, "family": "10B", "email": "test@test.com" },
+  { "week": 6, "family": "10D", "email": "test@test.com" },
+  { "week": 7, "family": "10E", "email": "test@test.com" },
   { "week": 8, "family": "10F", "email": "test@test.com" },
   { "week": 9, "family": "12F", "email": "test@test.com" },
   { "week": 10, "family": "12E", "email": "test@test.com" },

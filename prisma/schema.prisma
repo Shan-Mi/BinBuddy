@@ -21,6 +21,7 @@ model Family {
   id          String           @id @default(cuid())
   name        String
   email       String           
+  joinCode    String           @unique
   phone       String
   order       Int
   User        User?
