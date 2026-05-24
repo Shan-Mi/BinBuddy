@@ -459,8 +459,12 @@ export default function Dashboard() {
           <Card
             sx={{
               mb: 3,
+              position: 'sticky',
+              top: { xs: 60, sm: 70 }, // AppBar height for mobile/desktop
+              zIndex: 10,
               background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
               border: '1px solid #a5d6a7',
+              boxShadow: 3,
             }}>
             <CardContent sx={{ p: 3 }}>
               <Typography
