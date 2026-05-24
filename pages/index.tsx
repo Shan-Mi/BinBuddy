@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+} from '@hello-pangea/dnd'
 import {
   Alert,
   AppBar,
@@ -19,7 +24,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { Bell, GripVertical, LogIn, LogOut, Settings, Trash2 } from 'lucide-react'
+import {
+  Bell,
+  GripVertical,
+  LogIn,
+  LogOut,
+  Settings,
+  Trash2,
+} from 'lucide-react'
 import { signIn, signOut, useSession } from 'next-auth/react'
 import Link from 'next/link'
 import JoinFamilyModal from '../components/JoinFamilyModal'
@@ -59,7 +71,10 @@ type Snack = { msg: string; severity: 'success' | 'error' | 'info' }
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function familyInitial(name: string) {
-  return name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
+  return name
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 2)
+    .toUpperCase()
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
@@ -105,7 +120,10 @@ export default function Dashboard() {
   // Scroll current week into view after data loads
   useEffect(() => {
     if (!loading && currentRowRef.current) {
-      currentRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      currentRowRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
     }
   }, [loading])
 
@@ -114,7 +132,9 @@ export default function Dashboard() {
   const heroAssignment = assignments.find((a) => a.isCurrent)
 
   // Only upcoming (non-past, non-current) rows are draggable
-  const draggableAssignments = assignments.filter((a) => !a.isPast && !a.isCurrent)
+  const draggableAssignments = assignments.filter(
+    (a) => !a.isPast && !a.isCurrent
+  )
 
   const pendingSwaps = swaps.filter(
     (s) =>
@@ -133,7 +153,10 @@ export default function Dashboard() {
     if (!src || !dst || src.id === dst.id) return
 
     if (session.user.familyId !== src.family.id) {
-      setSnack({ msg: 'You can only drag your own week to propose a swap', severity: 'error' })
+      setSnack({
+        msg: 'You can only drag your own week to propose a swap',
+        severity: 'error',
+      })
       return
     }
 
@@ -150,10 +173,16 @@ export default function Dashboard() {
       })
       const json = await res.json()
       if (json.success) {
-        setSnack({ msg: 'Swap request sent — waiting for approval', severity: 'success' })
+        setSnack({
+          msg: 'Swap request sent — waiting for approval',
+          severity: 'success',
+        })
         await fetchData()
       } else {
-        setSnack({ msg: json.error ?? 'Failed to create swap', severity: 'error' })
+        setSnack({
+          msg: json.error ?? 'Failed to create swap',
+          severity: 'error',
+        })
       }
     } catch {
       setSnack({ msg: 'Network error', severity: 'error' })
@@ -165,11 +194,17 @@ export default function Dashboard() {
       const res = await fetch('/api/swaps', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ swapId, status: approve ? 'APPROVED' : 'REJECTED' }),
+        body: JSON.stringify({
+          swapId,
+          status: approve ? 'APPROVED' : 'REJECTED',
+        }),
       })
       const json = await res.json()
       if (json.success) {
-        setSnack({ msg: approve ? 'Swap approved!' : 'Swap rejected', severity: 'success' })
+        setSnack({
+          msg: approve ? 'Swap approved!' : 'Swap rejected',
+          severity: 'success',
+        })
         await fetchData()
       } else {
         setSnack({ msg: json.error ?? 'Update failed', severity: 'error' })
@@ -184,7 +219,10 @@ export default function Dashboard() {
       const res = await fetch('/api/send-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ familyId: assignment.family.id, weekNumber: assignment.weekNumber }),
+        body: JSON.stringify({
+          familyId: assignment.family.id,
+          weekNumber: assignment.weekNumber,
+        }),
       })
       const json = await res.json()
       setSnack(
@@ -200,7 +238,10 @@ export default function Dashboard() {
   const handleJoined = async (familyName: string) => {
     setJoinOpen(false)
     await updateSession()
-    setSnack({ msg: `Welcome, ${familyName}! You've joined your family group.`, severity: 'success' })
+    setSnack({
+      msg: `Welcome, ${familyName}! You've joined your family group.`,
+      severity: 'success',
+    })
     await fetchData()
   }
 
@@ -230,11 +271,14 @@ export default function Dashboard() {
           py: 1.2,
           borderBottom: '1px solid',
           borderColor: 'divider',
-          bgcolor: a.isCurrent ? 'primary.light' : a.isPast ? 'transparent' : 'transparent',
+          bgcolor: a.isCurrent
+            ? 'primary.light'
+            : a.isPast
+            ? 'transparent'
+            : 'transparent',
           opacity: a.isPast ? 0.45 : 1,
           '&:last-child': { borderBottom: 'none' },
-        }}
-      >
+        }}>
         {/* Week badge */}
         <Box
           sx={{
@@ -242,23 +286,29 @@ export default function Dashboard() {
             textAlign: 'center',
             fontWeight: 700,
             fontSize: 13,
-            color: a.isCurrent ? 'primary.dark' : a.isPast ? 'text.disabled' : 'text.secondary',
-          }}
-        >
+            color: a.isCurrent
+              ? 'primary.dark'
+              : a.isPast
+              ? 'text.disabled'
+              : 'text.secondary',
+          }}>
           W{a.weekNumber}
         </Box>
 
         {/* Avatar */}
         <Avatar
           sx={{
-            bgcolor: a.isCurrent ? 'primary.main' : a.isPast ? 'grey.300' : 'grey.200',
+            bgcolor: a.isCurrent
+              ? 'primary.main'
+              : a.isPast
+              ? 'grey.300'
+              : 'grey.200',
             color: a.isCurrent ? '#fff' : 'text.secondary',
             width: 32,
             height: 32,
             fontSize: 11,
             fontWeight: 700,
-          }}
-        >
+          }}>
           {familyInitial(a.family.name)}
         </Avatar>
 
@@ -267,32 +317,59 @@ export default function Dashboard() {
           variant="body2"
           fontWeight={a.isCurrent || isMyWeek ? 700 : 400}
           color={a.isPast ? 'text.disabled' : 'text.primary'}
-          sx={{ flexGrow: 1 }}
-        >
+          sx={{ flexGrow: 1 }}>
           {a.family.name}
         </Typography>
 
         {/* Status chips */}
         {a.isCurrent && (
-          <Chip label="Now" size="small" color="primary" sx={{ fontWeight: 700 }} />
+          <Chip
+            label="Now"
+            size="small"
+            color="primary"
+            sx={{ fontWeight: 700 }}
+          />
         )}
         {isMyWeek && !a.isPast && !a.isCurrent && (
-          <Chip label="Your Week" size="small" color="primary" variant="outlined" />
+          <Chip
+            label="Your Week"
+            size="small"
+            color="primary"
+            variant="outlined"
+          />
         )}
         {pendingSwap && (
-          <Chip label="Swap Pending" size="small" color="warning" variant="outlined" />
+          <Chip
+            label="Swap Pending"
+            size="small"
+            color="warning"
+            variant="outlined"
+          />
         )}
         {approvedSwap && (
-          <Chip label="Swapped" size="small" color="success" variant="outlined" />
+          <Chip
+            label="Swapped"
+            size="small"
+            color="success"
+            variant="outlined"
+          />
         )}
         {a.status === 'SWAPPED' && !approvedSwap && (
-          <Chip label="Swapped" size="small" color="default" variant="outlined" />
+          <Chip
+            label="Swapped"
+            size="small"
+            color="default"
+            variant="outlined"
+          />
         )}
 
         {/* Reminder button — current week only */}
         {a.isCurrent && session && (
           <Tooltip title="Send reminder email">
-            <IconButton size="small" color="primary" onClick={() => handleSendReminder(a)}>
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handleSendReminder(a)}>
               <Bell size={16} />
             </IconButton>
           </Tooltip>
@@ -308,7 +385,8 @@ export default function Dashboard() {
       {/* ── AppBar ── */}
       <AppBar position="sticky" color="inherit" elevation={0}>
         <Toolbar>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
             <Trash2 size={22} color="#4caf50" />
             <Typography variant="h6" color="primary" fontWeight={700}>
               BinBuddy
@@ -327,8 +405,7 @@ export default function Dashboard() {
               <Typography
                 variant="body2"
                 color="text.secondary"
-                sx={{ mr: 1.5, display: { xs: 'none', sm: 'block' } }}
-              >
+                sx={{ mr: 1.5, display: { xs: 'none', sm: 'block' } }}>
                 {session.user.name ?? session.user.email}
               </Typography>
 
@@ -337,8 +414,7 @@ export default function Dashboard() {
                   variant="outlined"
                   size="small"
                   sx={{ mr: 1 }}
-                  onClick={() => setJoinOpen(true)}
-                >
+                  onClick={() => setJoinOpen(true)}>
                   Join Family
                 </Button>
               )}
@@ -346,7 +422,10 @@ export default function Dashboard() {
               {session.user.isAdmin && (
                 <Link href="/admin" passHref legacyBehavior>
                   <Tooltip title="Admin">
-                    <IconButton size="small" sx={{ mr: 0.5 }} aria-label="Admin">
+                    <IconButton
+                      size="small"
+                      sx={{ mr: 0.5 }}
+                      aria-label="Admin">
                       <Settings size={18} />
                     </IconButton>
                   </Tooltip>
@@ -354,7 +433,10 @@ export default function Dashboard() {
               )}
 
               <Tooltip title="Sign out">
-                <IconButton size="small" onClick={() => signOut()} aria-label="Sign out">
+                <IconButton
+                  size="small"
+                  onClick={() => signOut()}
+                  aria-label="Sign out">
                   <LogOut size={18} />
                 </IconButton>
               </Tooltip>
@@ -364,8 +446,7 @@ export default function Dashboard() {
               variant="contained"
               size="small"
               startIcon={<LogIn size={16} />}
-              onClick={() => signIn()}
-            >
+              onClick={() => signIn()}>
               Sign in
             </Button>
           )}
@@ -380,16 +461,24 @@ export default function Dashboard() {
               mb: 3,
               background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
               border: '1px solid #a5d6a7',
-            }}
-          >
+            }}>
             <CardContent sx={{ p: 3 }}>
-              <Typography variant="overline" color="primary" display="block" mb={1}>
+              <Typography
+                variant="overline"
+                color="primary"
+                display="block"
+                mb={1}>
                 🗑️ This Week · Bin Duty
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Avatar
-                  sx={{ bgcolor: 'primary.main', width: 60, height: 60, fontSize: 20, fontWeight: 700 }}
-                >
+                  sx={{
+                    bgcolor: 'primary.main',
+                    width: 60,
+                    height: 60,
+                    fontSize: 20,
+                    fontWeight: 700,
+                  }}>
                   {familyInitial(heroAssignment.family.name)}
                 </Avatar>
                 <Box sx={{ flexGrow: 1 }}>
@@ -406,8 +495,7 @@ export default function Dashboard() {
                     color="primary"
                     size="small"
                     startIcon={<Bell size={14} />}
-                    onClick={() => handleSendReminder(heroAssignment)}
-                  >
+                    onClick={() => handleSendReminder(heroAssignment)}>
                     Send Reminder
                   </Button>
                 )}
@@ -418,7 +506,7 @@ export default function Dashboard() {
 
         <Grid container spacing={3}>
           {/* ── Full-year schedule ── */}
-          <Grid xs={12} md={7}>
+          <Grid size={{ xs: 12, md: 7 }}>
             <Typography variant="h6" gutterBottom>
               {currentYear} Schedule
             </Typography>
@@ -443,15 +531,20 @@ export default function Dashboard() {
                     {(provided) => (
                       <Box ref={provided.innerRef} {...provided.droppableProps}>
                         {draggableAssignments.map((a, i) => {
-                          const isMyWeek = session?.user?.familyId === a.family.id
+                          const isMyWeek =
+                            session?.user?.familyId === a.family.id
                           const pendingSwap = swaps.find(
                             (s) =>
                               s.status === 'PENDING' &&
                               s.weekNumber === a.weekNumber &&
-                              [s.fromFamilyId, s.toFamilyId].includes(a.family.id)
+                              [s.fromFamilyId, s.toFamilyId].includes(
+                                a.family.id
+                              )
                           )
                           const approvedSwap = swaps.find(
-                            (s) => s.status === 'APPROVED' && s.weekNumber === a.weekNumber
+                            (s) =>
+                              s.status === 'APPROVED' &&
+                              s.weekNumber === a.weekNumber
                           )
 
                           return (
@@ -459,8 +552,7 @@ export default function Dashboard() {
                               key={a.id}
                               draggableId={a.id}
                               index={i}
-                              isDragDisabled={!isMyWeek}
-                            >
+                              isDragDisabled={!isMyWeek}>
                               {(provided, snapshot) => (
                                 <Box
                                   ref={provided.innerRef}
@@ -473,23 +565,25 @@ export default function Dashboard() {
                                     py: 1.2,
                                     borderBottom: '1px solid',
                                     borderColor: 'divider',
-                                    bgcolor: snapshot.isDragging ? 'primary.light' : 'transparent',
+                                    bgcolor: snapshot.isDragging
+                                      ? 'primary.light'
+                                      : 'transparent',
                                     boxShadow: snapshot.isDragging
                                       ? '0 4px 16px rgba(76,175,80,0.18)'
                                       : 'none',
                                     '&:last-child': { borderBottom: 'none' },
-                                  }}
-                                >
+                                  }}>
                                   {/* Drag handle */}
                                   <Box
                                     {...provided.dragHandleProps}
                                     sx={{
-                                      color: isMyWeek ? 'primary.main' : 'action.disabled',
+                                      color: isMyWeek
+                                        ? 'primary.main'
+                                        : 'action.disabled',
                                       cursor: isMyWeek ? 'grab' : 'default',
                                       display: 'flex',
                                       mr: -0.5,
-                                    }}
-                                  >
+                                    }}>
                                     <GripVertical size={16} />
                                   </Box>
 
@@ -501,22 +595,24 @@ export default function Dashboard() {
                                       fontWeight: 700,
                                       fontSize: 13,
                                       color: 'text.secondary',
-                                    }}
-                                  >
+                                    }}>
                                     W{a.weekNumber}
                                   </Box>
 
                                   {/* Avatar */}
                                   <Avatar
                                     sx={{
-                                      bgcolor: isMyWeek ? 'primary.main' : 'grey.200',
-                                      color: isMyWeek ? '#fff' : 'text.secondary',
+                                      bgcolor: isMyWeek
+                                        ? 'primary.main'
+                                        : 'grey.200',
+                                      color: isMyWeek
+                                        ? '#fff'
+                                        : 'text.secondary',
                                       width: 32,
                                       height: 32,
                                       fontSize: 11,
                                       fontWeight: 700,
-                                    }}
-                                  >
+                                    }}>
                                     {familyInitial(a.family.name)}
                                   </Avatar>
 
@@ -524,8 +620,7 @@ export default function Dashboard() {
                                   <Typography
                                     variant="body2"
                                     fontWeight={isMyWeek ? 700 : 400}
-                                    sx={{ flexGrow: 1 }}
-                                  >
+                                    sx={{ flexGrow: 1 }}>
                                     {a.family.name}
                                   </Typography>
 
@@ -569,7 +664,7 @@ export default function Dashboard() {
           </Grid>
 
           {/* ── Swap requests panel ── */}
-          <Grid xs={12} md={5}>
+          <Grid size={{ xs: 12, md: 5 }}>
             <Typography variant="h6" gutterBottom>
               Swap Requests
             </Typography>
@@ -584,8 +679,7 @@ export default function Dashboard() {
                     variant="outlined"
                     size="small"
                     startIcon={<LogIn size={14} />}
-                    onClick={() => signIn()}
-                  >
+                    onClick={() => signIn()}>
                     Sign in
                   </Button>
                 </CardContent>
@@ -596,7 +690,10 @@ export default function Dashboard() {
                   <Typography variant="body2" color="text.secondary" mb={2}>
                     Join a family to see swap requests.
                   </Typography>
-                  <Button variant="outlined" size="small" onClick={() => setJoinOpen(true)}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setJoinOpen(true)}>
                     Join Family
                   </Button>
                 </CardContent>
@@ -626,8 +723,7 @@ export default function Dashboard() {
                         color="success"
                         size="small"
                         fullWidth
-                        onClick={() => handleSwapAction(swap.id, true)}
-                      >
+                        onClick={() => handleSwapAction(swap.id, true)}>
                         Approve
                       </Button>
                       <Button
@@ -635,8 +731,7 @@ export default function Dashboard() {
                         color="error"
                         size="small"
                         fullWidth
-                        onClick={() => handleSwapAction(swap.id, false)}
-                      >
+                        onClick={() => handleSwapAction(swap.id, false)}>
                         Reject
                       </Button>
                     </Box>
@@ -659,9 +754,11 @@ export default function Dashboard() {
         open={!!snack}
         autoHideDuration={4000}
         onClose={() => setSnack(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snack?.severity} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert
+          severity={snack?.severity}
+          onClose={() => setSnack(null)}
+          sx={{ width: '100%' }}>
           {snack?.msg}
         </Alert>
       </Snackbar>
