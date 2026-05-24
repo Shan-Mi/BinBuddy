@@ -11,7 +11,11 @@
     "preview": "next preview",
     "reset": "npx prisma migrate reset",
     "seed": "npx ts-node --esm prisma/seed.ts",
-    "migration": "npx prisma migrate dev --name init"
+    "migration": "npx prisma migrate dev --name init",
+    "setup": "npx prisma generate && npx prisma db push && npm run seed",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
@@ -33,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@playwright/test": "^1.60.0",
     "@types/node": "22.14.1",
     "@types/react": "^18.0.10",
     "@types/react-dom": "^18.0.4",

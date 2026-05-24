@@ -1,352 +1,670 @@
-import { useState, useEffect } from 'react'
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import { Card, CardContent, Button, TextField } from '@mui/material'
-import { Mail, Phone, GripVertical } from 'lucide-react'
-import { useSession } from 'next-auth/react'
-import { getSwedishWeekNumber } from '../utils/schedule'
+import { useEffect, useRef, useState } from 'react'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
+import {
+  Alert,
+  AppBar,
+  Avatar,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  Grid,
+  IconButton,
+  Snackbar,
+  Toolbar,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import { Bell, GripVertical, LogIn, LogOut, Settings, Trash2 } from 'lucide-react'
+import { signIn, signOut, useSession } from 'next-auth/react'
+import Link from 'next/link'
+import JoinFamilyModal from '../components/JoinFamilyModal'
+import { getISOWeek, getISOWeekYear } from '../utils/isoWeek'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Family {
   id: string
   name: string
-  email: string
-  phone: string
-  order: number
+  rotationOrder: number
 }
 
-interface Swap {
+interface ScheduleAssignment {
   id: string
   weekNumber: number
+  year: number
+  status: 'ACTIVE' | 'SWAPPED'
+  family: Family
+  isCurrent: boolean
+  isPast: boolean
+}
+
+interface SwapRequest {
+  id: string
+  weekNumber: number
+  year: number
   fromFamilyId: string
   toFamilyId: string
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  fromFamily: Family
+  toFamily: Family
 }
 
-interface WeekAssignment {
-  id: string
-  week: number
-  family: Family
+type Snack = { msg: string; severity: 'success' | 'error' | 'info' }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function familyInitial(name: string) {
+  return name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
 }
 
-export default function BinBuddy() {
-  const { data: session } = useSession()
-  const [assignments, setAssignments] = useState<WeekAssignment[]>([])
+// ─── Dashboard ───────────────────────────────────────────────────────────────
 
-  const [swaps, setSwaps] = useState<Swap[]>([])
-  const [message, setMessage] = useState(
-    'Reminder: 🗑️ Please pull out the garbage before Tuesday 6:00AM. Thanks! 💜'
-  )
-  const currentWeek = getSwedishWeekNumber(new Date())
+export default function Dashboard() {
+  const { data: session, update: updateSession } = useSession()
+  const currentRowRef = useRef<HTMLDivElement | null>(null)
+
+  const [assignments, setAssignments] = useState<ScheduleAssignment[]>([])
+  const [swaps, setSwaps] = useState<SwapRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [snack, setSnack] = useState<Snack | null>(null)
+
+  const now = new Date()
+  const currentWeek = getISOWeek(now)
+  const currentYear = getISOWeekYear(now)
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      // Full-year schedule + all swaps for the year (for badge display)
+      const [schedRes, swapsRes] = await Promise.all([
+        fetch('/api/schedule'),
+        fetch(`/api/swaps?year=${currentYear}`),
+      ])
+      const { data: sched } = await schedRes.json()
+      const { data: swapsData } = await swapsRes.json()
+      setAssignments(sched ?? [])
+      setSwaps(swapsData ?? [])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchAssignments = async () => {
-      const res = await fetch('/api/week-assignment')
-      const data = await res.json()
-      const swapsRes = await fetch(`/api/swaps?week=${currentWeek}`)
-      const swapsData = await swapsRes.json()
-      setSwaps(swapsData)
-      setAssignments(data)
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentYear])
+
+  // Scroll current week into view after data loads
+  useEffect(() => {
+    if (!loading && currentRowRef.current) {
+      currentRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-    fetchAssignments()
-  }, [currentWeek])
+  }, [loading])
 
-  const handleDragEnd = async (result: any) => {
-    if (!result.destination || !session) return
+  // ── Derived state ──────────────────────────────────────────────────────────
 
-    const sourceIndex = result.source.index
-    const destIndex = result.destination.index
-    const nextWeek = currentWeek + 1
+  const heroAssignment = assignments.find((a) => a.isCurrent)
+
+  // Only upcoming (non-past, non-current) rows are draggable
+  const draggableAssignments = assignments.filter((a) => !a.isPast && !a.isCurrent)
+
+  const pendingSwaps = swaps.filter(
+    (s) =>
+      s.status === 'PENDING' &&
+      session?.user?.familyId &&
+      [s.fromFamilyId, s.toFamilyId].includes(session.user.familyId)
+  )
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination || !session?.user?.familyId) return
+
+    const src = draggableAssignments[result.source.index]
+    const dst = draggableAssignments[result.destination.index]
+    if (!src || !dst || src.id === dst.id) return
+
+    if (session.user.familyId !== src.family.id) {
+      setSnack({ msg: 'You can only drag your own week to propose a swap', severity: 'error' })
+      return
+    }
 
     try {
-      const response = await fetch('/api/swaps', {
+      const res = await fetch('/api/swaps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fromFamilyId: assignments[sourceIndex].family.id,
-          toFamilyId: assignments[destIndex].family.id,
-          weekNumber: nextWeek,
+          fromFamilyId: src.family.id,
+          toFamilyId: dst.family.id,
+          weekNumber: src.weekNumber,
+          year: src.year,
         }),
       })
-
-      if (response.ok) {
-        const newSwap = await response.json()
-        setSwaps([...swaps, newSwap])
-        alert('Swap request sent! Approval required from both families.')
+      const json = await res.json()
+      if (json.success) {
+        setSnack({ msg: 'Swap request sent — waiting for approval', severity: 'success' })
+        await fetchData()
+      } else {
+        setSnack({ msg: json.error ?? 'Failed to create swap', severity: 'error' })
       }
-    } catch (error) {
-      console.error('Error proposing swap:', error)
+    } catch {
+      setSnack({ msg: 'Network error', severity: 'error' })
     }
   }
 
-  const handleSwapApproval = async (swapId: string, approved: boolean) => {
+  const handleSwapAction = async (swapId: string, approve: boolean) => {
     try {
-      const response = await fetch('/api/swaps', {
+      const res = await fetch('/api/swaps', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          swapId,
-          status: approved ? 'APPROVED' : 'REJECTED',
-        }),
+        body: JSON.stringify({ swapId, status: approve ? 'APPROVED' : 'REJECTED' }),
       })
-
-      if (response.ok) {
-        const updatedSwap = await response.json()
-        setSwaps(swaps.map((swap) => (swap.id === swapId ? updatedSwap : swap)))
-        if (approved) {
-          const swapsRes = await fetch(`/api/swaps?week=${currentWeek}`)
-          setSwaps(await swapsRes.json())
-        }
+      const json = await res.json()
+      if (json.success) {
+        setSnack({ msg: approve ? 'Swap approved!' : 'Swap rejected', severity: 'success' })
+        await fetchData()
+      } else {
+        setSnack({ msg: json.error ?? 'Update failed', severity: 'error' })
       }
-    } catch (error) {
-      console.error('Error updating swap:', error)
+    } catch {
+      setSnack({ msg: 'Network error', severity: 'error' })
     }
   }
 
-  const sendReminder = async (family: Family) => {
+  const handleSendReminder = async (assignment: ScheduleAssignment) => {
     try {
-      const response = await fetch('/api/send-reminder', {
+      const res = await fetch('/api/send-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ family, message }),
+        body: JSON.stringify({ familyId: assignment.family.id, weekNumber: assignment.weekNumber }),
       })
-
-      if (!response.ok) throw new Error('Failed to send reminder')
-      alert('Reminder sent successfully!')
-    } catch (error) {
-      console.error('Error sending reminder:', error)
-      alert('Error sending reminder')
+      const json = await res.json()
+      setSnack(
+        json.success
+          ? { msg: 'Reminder sent!', severity: 'success' }
+          : { msg: json.error ?? 'Failed to send', severity: 'error' }
+      )
+    } catch {
+      setSnack({ msg: 'Network error', severity: 'error' })
     }
   }
 
-  // Apply approved swaps for current week
-  // const displayedFamilies = [...families].sort((a, b) => a.order - b.order)
-  // .filter((family, index) => index + 1 >= currentWeek)
-  // Only show current and future assignments
+  const handleJoined = async (familyName: string) => {
+    setJoinOpen(false)
+    await updateSession()
+    setSnack({ msg: `Welcome, ${familyName}! You've joined your family group.`, severity: 'success' })
+    await fetchData()
+  }
 
-  const displayedAssignments = Array.isArray(assignments)
-    ? assignments
-        .filter((a) => a.week >= currentWeek)
-        .sort((a, b) => a.week - b.week)
-    : []
+  // ── Schedule row renderer (also used for static past rows) ─────────────────
 
-  // swaps
-  //   .filter(
-  //     (swap) => swap.status === 'APPROVED' && swap.weekNumber === currentWeek
-  //   )
-  //   .forEach((swap) => {
-  //     const fromIndex = displayedFamilies.findIndex(
-  //       (f) => f.id === swap.fromFamilyId
-  //     )
-  //     const toIndex = displayedFamilies.findIndex(
-  //       (f) => f.id === swap.toFamilyId
-  //     )
-  //     if (fromIndex !== -1 && toIndex !== -1) {
-  //       [displayedFamilies[fromIndex], displayedFamilies[toIndex]] = [
-  //         displayedFamilies[toIndex],
-  //         displayedFamilies[fromIndex],
-  //       ]
-  //     }
-  //   })
+  const renderStaticRow = (a: ScheduleAssignment) => {
+    const isMyWeek = session?.user?.familyId === a.family.id
+    const pendingSwap = swaps.find(
+      (s) =>
+        s.status === 'PENDING' &&
+        s.weekNumber === a.weekNumber &&
+        [s.fromFamilyId, s.toFamilyId].includes(a.family.id)
+    )
+    const approvedSwap = swaps.find(
+      (s) => s.status === 'APPROVED' && s.weekNumber === a.weekNumber
+    )
+
+    return (
+      <Box
+        key={a.id}
+        ref={a.isCurrent ? currentRowRef : undefined}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 2,
+          py: 1.2,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: a.isCurrent ? 'primary.light' : a.isPast ? 'transparent' : 'transparent',
+          opacity: a.isPast ? 0.45 : 1,
+          '&:last-child': { borderBottom: 'none' },
+        }}
+      >
+        {/* Week badge */}
+        <Box
+          sx={{
+            minWidth: 42,
+            textAlign: 'center',
+            fontWeight: 700,
+            fontSize: 13,
+            color: a.isCurrent ? 'primary.dark' : a.isPast ? 'text.disabled' : 'text.secondary',
+          }}
+        >
+          W{a.weekNumber}
+        </Box>
+
+        {/* Avatar */}
+        <Avatar
+          sx={{
+            bgcolor: a.isCurrent ? 'primary.main' : a.isPast ? 'grey.300' : 'grey.200',
+            color: a.isCurrent ? '#fff' : 'text.secondary',
+            width: 32,
+            height: 32,
+            fontSize: 11,
+            fontWeight: 700,
+          }}
+        >
+          {familyInitial(a.family.name)}
+        </Avatar>
+
+        {/* Family name */}
+        <Typography
+          variant="body2"
+          fontWeight={a.isCurrent || isMyWeek ? 700 : 400}
+          color={a.isPast ? 'text.disabled' : 'text.primary'}
+          sx={{ flexGrow: 1 }}
+        >
+          {a.family.name}
+        </Typography>
+
+        {/* Status chips */}
+        {a.isCurrent && (
+          <Chip label="Now" size="small" color="primary" sx={{ fontWeight: 700 }} />
+        )}
+        {isMyWeek && !a.isPast && !a.isCurrent && (
+          <Chip label="Your Week" size="small" color="primary" variant="outlined" />
+        )}
+        {pendingSwap && (
+          <Chip label="Swap Pending" size="small" color="warning" variant="outlined" />
+        )}
+        {approvedSwap && (
+          <Chip label="Swapped" size="small" color="success" variant="outlined" />
+        )}
+        {a.status === 'SWAPPED' && !approvedSwap && (
+          <Chip label="Swapped" size="small" color="default" variant="outlined" />
+        )}
+
+        {/* Reminder button — current week only */}
+        {a.isCurrent && session && (
+          <Tooltip title="Send reminder email">
+            <IconButton size="small" color="primary" onClick={() => handleSendReminder(a)}>
+              <Bell size={16} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+    )
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ margin: '0 auto' }}>
-      <h1
-        style={{
-          fontSize: '32px',
-          fontWeight: 'bold',
-          textAlign: 'center',
-          marginBottom: '24px',
-          position: 'sticky',
-          top: '0',
-          backgroundColor: '#fff', // Make sure it has a background color to be visible
-          zIndex: 1, // Ensure it's above other content
-          padding: '8px 0', // Optional padding for better spacing
-          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', // Optional shadow for better visibility
-        }}>
-        🗑️ BinBuddy - Week {currentWeek}
-      </h1>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* ── AppBar ── */}
+      <AppBar position="sticky" color="inherit" elevation={0}>
+        <Toolbar>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
+            <Trash2 size={22} color="#4caf50" />
+            <Typography variant="h6" color="primary" fontWeight={700}>
+              BinBuddy
+            </Typography>
+          </Box>
 
-      <Card style={{ marginBottom: '24px', padding: '16px' }}>
-        <CardContent style={{ padding: '16px' }}>
-          <div style={{ marginBottom: '24px' }}>
-            <TextField
-              fullWidth
-              label="Reminder Message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              variant="outlined"
-              multiline // Make it a multi-line text area
-              sx={{
-                '@media (max-width: 600px)': {
-                  // Adjust styles for mobile (for example, larger font or padding)
-                  fontSize: '16px', // Increase font size if needed
-                },
-              }}
-            />
-          </div>
+          <Chip
+            label={`Week ${currentWeek} · ${currentYear}`}
+            color="primary"
+            size="small"
+            sx={{ mr: 2 }}
+          />
 
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="families">
-              {(provided) => (
-                <div {...provided.droppableProps} ref={provided.innerRef}>
-                  {displayedAssignments.map((assignment, index) => {
-                    const { family, week } = assignment
-                    const pendingSwap = swaps.find(
-                      (swap) =>
-                        [swap.fromFamilyId, swap.toFamilyId].includes(
-                          family.id
-                        ) && swap.status === 'PENDING'
-                    )
+          {session ? (
+            <>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mr: 1.5, display: { xs: 'none', sm: 'block' } }}
+              >
+                {session.user.name ?? session.user.email}
+              </Typography>
 
-                    return (
-                      <Draggable
-                        key={family.id}
-                        draggableId={family.id}
-                        index={index}
-                        isDragDisabled={!session}>
-                        {(provided) => (
-                          <Card
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            style={{
-                              ...provided.draggableProps.style,
-                              marginBottom: '16px',
-                              padding: '16px',
-                              border: '1px solid #ddd',
-                              borderRadius: '8px',
-                              backgroundColor:
-                                week === currentWeek ? '#f0af4d' : '#f9f9f9',
-                            }}>
-                            <div
-                              style={{ display: 'flex', alignItems: 'center' }}>
-                              <div {...provided.dragHandleProps}>
-                                <GripVertical style={{ marginRight: '16px' }} />
-                              </div>
-                              <div style={{ flexGrow: 1 }}>
-                                <h2
-                                  style={{
-                                    fontSize: '20px',
-                                    fontWeight: '600',
-                                    marginBottom: '8px',
-                                  }}>
-                                  {family.name} V{week}
-                                  {pendingSwap && (
-                                    <span
-                                      style={{
-                                        color: '#ffa726',
-                                        fontSize: '14px',
-                                        marginLeft: '8px',
-                                      }}>
-                                      (Swap Requested)
-                                    </span>
-                                  )}
-                                </h2>
-                                <p
-                                  style={{
-                                    fontSize: '14px',
-                                    color: '#555',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    marginBottom: '8px',
-                                  }}>
-                                  <Mail
-                                    style={{
-                                      width: '16px',
-                                      height: '16px',
-                                      marginRight: '8px',
-                                    }}
-                                  />
-                                  {family.email}
-                                </p>
-                                <p
-                                  style={{
-                                    fontSize: '14px',
-                                    color: '#555',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    marginBottom: '16px',
-                                  }}>
-                                  <Phone
-                                    style={{
-                                      width: '16px',
-                                      height: '16px',
-                                      marginRight: '8px',
-                                    }}
-                                  />
-                                  {family.phone}
-                                </p>
-                              </div>
-                              <Button
-                                onClick={() => sendReminder(family)}
-                                style={{ padding: '8px 16px' }}>
-                                Send Now
-                              </Button>
-                            </div>
-                          </Card>
-                        )}
-                      </Draggable>
-                    )
-                  })}
-                  {provided.placeholder}
-                </div>
+              {!session.user.familyId && !session.user.isAdmin && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  sx={{ mr: 1 }}
+                  onClick={() => setJoinOpen(true)}
+                >
+                  Join Family
+                </Button>
               )}
-            </Droppable>
-          </DragDropContext>
-        </CardContent>
-      </Card>
 
-      {session && (
-        <Card style={{ padding: '16px', marginBottom: '24px' }}>
-          <CardContent>
-            <h3 style={{ fontSize: '20px', marginBottom: '16px' }}>
-              Pending Swap Requests
-            </h3>
-            {swaps
-              .filter(
-                (swap) =>
-                  swap.status === 'PENDING' &&
-                  [swap.fromFamilyId, swap.toFamilyId].includes(
-                    session.user.familyId
-                  )
-              )
-              .map((swap) => (
-                <div
-                  key={swap.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '12px',
-                    padding: '12px',
-                    border: '1px solid #eee',
-                    borderRadius: '8px',
-                  }}>
-                  {/* <div>
-                    Swap week {swap.weekNumber}:{' '}
-                    {families.find((f) => f.id === swap.fromFamilyId)?.name} ↔{' '}
-                    {families.find((f) => f.id === swap.toFamilyId)?.name}
-                  </div> */}
-                  <div>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      size="small"
-                      onClick={() => handleSwapApproval(swap.id, true)}
-                      style={{ marginRight: '8px' }}>
-                      Approve
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      size="small"
-                      onClick={() => handleSwapApproval(swap.id, false)}>
-                      Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+              {session.user.isAdmin && (
+                <Link href="/admin" passHref legacyBehavior>
+                  <Tooltip title="Admin">
+                    <IconButton size="small" sx={{ mr: 0.5 }} aria-label="Admin">
+                      <Settings size={18} />
+                    </IconButton>
+                  </Tooltip>
+                </Link>
+              )}
+
+              <Tooltip title="Sign out">
+                <IconButton size="small" onClick={() => signOut()} aria-label="Sign out">
+                  <LogOut size={18} />
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<LogIn size={16} />}
+              onClick={() => signIn()}
+            >
+              Sign in
+            </Button>
+          )}
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        {/* ── Hero card ── */}
+        {heroAssignment && (
+          <Card
+            sx={{
+              mb: 3,
+              background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
+              border: '1px solid #a5d6a7',
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="overline" color="primary" display="block" mb={1}>
+                🗑️ This Week · Bin Duty
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Avatar
+                  sx={{ bgcolor: 'primary.main', width: 60, height: 60, fontSize: 20, fontWeight: 700 }}
+                >
+                  {familyInitial(heroAssignment.family.name)}
+                </Avatar>
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="h4" color="primary.dark">
+                    {heroAssignment.family.name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Week {heroAssignment.weekNumber}, {heroAssignment.year}
+                  </Typography>
+                </Box>
+                {session && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    startIcon={<Bell size={14} />}
+                    onClick={() => handleSendReminder(heroAssignment)}
+                  >
+                    Send Reminder
+                  </Button>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+        )}
+
+        <Grid container spacing={3}>
+          {/* ── Full-year schedule ── */}
+          <Grid xs={12} md={7}>
+            <Typography variant="h6" gutterBottom>
+              {currentYear} Schedule
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              {session?.user?.familyId
+                ? 'Drag your upcoming week onto another to propose a swap.'
+                : 'Sign in to propose swaps.'}
+            </Typography>
+
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                <CircularProgress color="primary" />
+              </Box>
+            ) : (
+              <Card sx={{ overflow: 'hidden' }}>
+                {/* Current week (static) */}
+                {assignments.filter((a) => a.isCurrent).map(renderStaticRow)}
+
+                {/* Upcoming rows (drag-and-drop) */}
+                <DragDropContext onDragEnd={handleDragEnd}>
+                  <Droppable droppableId="schedule">
+                    {(provided) => (
+                      <Box ref={provided.innerRef} {...provided.droppableProps}>
+                        {draggableAssignments.map((a, i) => {
+                          const isMyWeek = session?.user?.familyId === a.family.id
+                          const pendingSwap = swaps.find(
+                            (s) =>
+                              s.status === 'PENDING' &&
+                              s.weekNumber === a.weekNumber &&
+                              [s.fromFamilyId, s.toFamilyId].includes(a.family.id)
+                          )
+                          const approvedSwap = swaps.find(
+                            (s) => s.status === 'APPROVED' && s.weekNumber === a.weekNumber
+                          )
+
+                          return (
+                            <Draggable
+                              key={a.id}
+                              draggableId={a.id}
+                              index={i}
+                              isDragDisabled={!isMyWeek}
+                            >
+                              {(provided, snapshot) => (
+                                <Box
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1.5,
+                                    px: 2,
+                                    py: 1.2,
+                                    borderBottom: '1px solid',
+                                    borderColor: 'divider',
+                                    bgcolor: snapshot.isDragging ? 'primary.light' : 'transparent',
+                                    boxShadow: snapshot.isDragging
+                                      ? '0 4px 16px rgba(76,175,80,0.18)'
+                                      : 'none',
+                                    '&:last-child': { borderBottom: 'none' },
+                                  }}
+                                >
+                                  {/* Drag handle */}
+                                  <Box
+                                    {...provided.dragHandleProps}
+                                    sx={{
+                                      color: isMyWeek ? 'primary.main' : 'action.disabled',
+                                      cursor: isMyWeek ? 'grab' : 'default',
+                                      display: 'flex',
+                                      mr: -0.5,
+                                    }}
+                                  >
+                                    <GripVertical size={16} />
+                                  </Box>
+
+                                  {/* Week badge */}
+                                  <Box
+                                    sx={{
+                                      minWidth: 34,
+                                      textAlign: 'center',
+                                      fontWeight: 700,
+                                      fontSize: 13,
+                                      color: 'text.secondary',
+                                    }}
+                                  >
+                                    W{a.weekNumber}
+                                  </Box>
+
+                                  {/* Avatar */}
+                                  <Avatar
+                                    sx={{
+                                      bgcolor: isMyWeek ? 'primary.main' : 'grey.200',
+                                      color: isMyWeek ? '#fff' : 'text.secondary',
+                                      width: 32,
+                                      height: 32,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {familyInitial(a.family.name)}
+                                  </Avatar>
+
+                                  {/* Family name */}
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight={isMyWeek ? 700 : 400}
+                                    sx={{ flexGrow: 1 }}
+                                  >
+                                    {a.family.name}
+                                  </Typography>
+
+                                  {/* Status chips */}
+                                  {isMyWeek && (
+                                    <Chip
+                                      label="Your Week"
+                                      size="small"
+                                      color="primary"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                  {pendingSwap && (
+                                    <Chip
+                                      label="Swap Pending"
+                                      size="small"
+                                      color="warning"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                  {approvedSwap && (
+                                    <Chip
+                                      label="Swapped"
+                                      size="small"
+                                      color="success"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                </Box>
+                              )}
+                            </Draggable>
+                          )
+                        })}
+                        {provided.placeholder}
+                      </Box>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+              </Card>
+            )}
+          </Grid>
+
+          {/* ── Swap requests panel ── */}
+          <Grid xs={12} md={5}>
+            <Typography variant="h6" gutterBottom>
+              Swap Requests
+            </Typography>
+
+            {!session ? (
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 5 }}>
+                  <Typography variant="body2" color="text.secondary" mb={2}>
+                    Sign in to view and manage swap requests.
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<LogIn size={14} />}
+                    onClick={() => signIn()}
+                  >
+                    Sign in
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : !session.user.familyId && !session.user.isAdmin ? (
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 5 }}>
+                  <Typography variant="body2" color="text.secondary" mb={2}>
+                    Join a family to see swap requests.
+                  </Typography>
+                  <Button variant="outlined" size="small" onClick={() => setJoinOpen(true)}>
+                    Join Family
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : pendingSwaps.length === 0 ? (
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 5 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    No pending swap requests.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              pendingSwaps.map((swap) => (
+                <Card key={swap.id} sx={{ mb: 1.5 }}>
+                  <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Week {swap.weekNumber} swap
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" mb={1.5}>
+                      {swap.fromFamily.name} ↔ {swap.toFamily.name}
+                    </Typography>
+                    <Divider sx={{ mb: 1.5 }} />
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        fullWidth
+                        onClick={() => handleSwapAction(swap.id, true)}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        fullWidth
+                        onClick={() => handleSwapAction(swap.id, false)}
+                      >
+                        Reject
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </Grid>
+        </Grid>
+      </Container>
+
+      {/* ── Modals & Toasts ── */}
+      <JoinFamilyModal
+        open={joinOpen}
+        onClose={() => setJoinOpen(false)}
+        onJoined={handleJoined}
+      />
+
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={4000}
+        onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snack?.severity} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
+          {snack?.msg}
+        </Alert>
+      </Snackbar>
+    </Box>
   )
 }

@@ -2,119 +2,81 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-const scheduleData = [
-  { week: 1, family: '12E', email: 'test@test.com' },
-  { week: 2, family: '12D', email: 'test@test.com' },
-  { week: 3, family: '12B', email: 'test@test.com' },
-  { week: 4, family: '10A', email: 'test@test.com' },
-  { week: 5, family: '10B', email: 'nkasbi@gmail.com' },
-  { week: 6, family: '10D', email: 'fanfang2014@gmail.com' },
-  { week: 7, family: '10E', email: 'test@test.com' },
-  { week: 8, family: '10F', email: 'test@test.com' },
-  { week: 9, family: '12F', email: 'test@test.com' },
-  { week: 10, family: '12E' },
-  { week: 11, family: '12D' },
-  { week: 12, family: '12B' },
-  { week: 13, family: '10A' },
-  { week: 14, family: '10B' },
-  { week: 15, family: '10D' },
-  { week: 16, family: '10E' },
-  { week: 17, family: '10F' },
-  { week: 18, family: '12F' },
-  { week: 19, family: '12E' },
-  { week: 20, family: '12D' },
-  { week: 21, family: '12B' },
-  { week: 22, family: '10A' },
-  { week: 23, family: '10B' },
-  { week: 24, family: '10D' },
-  { week: 25, family: '10E' },
-  { week: 26, family: '10F' },
-  { week: 27, family: '12F' },
-  { week: 28, family: '12E' },
-  { week: 29, family: '12D' },
-  { week: 30, family: '12B' },
-  { week: 31, family: '10A' },
-  { week: 32, family: '10B' },
-  { week: 33, family: '10D' },
-  { week: 34, family: '10E' },
-  { week: 35, family: '10F' },
-  { week: 36, family: '12F' },
-  { week: 37, family: '12E' },
-  { week: 38, family: '12D' },
-  { week: 39, family: '12B' },
-  { week: 40, family: '10A' },
-  { week: 41, family: '10B' },
-  { week: 42, family: '10D' },
-  { week: 43, family: '10E' },
-  { week: 44, family: '10F' },
-  { week: 45, family: '12F' },
-  { week: 46, family: '12E' },
-  { week: 47, family: '12D' },
-  { week: 48, family: '12B' },
-  { week: 49, family: '10A' },
-  { week: 50, family: '10B' },
-  { week: 51, family: '10D' },
-  { week: 52, family: '10E' },
-]
+const YEAR = 2026
 
-const joinCodes: Record<string, string> = {
-  '10F': 'join-10f',
-  '12F': 'join-12f',
-  '12E': 'join-12e',
-  '12D': 'join-12d',
-  '12B': 'join-12b',
-  '10A': 'join-10a',
-  '10B': 'join-10b',
-  '10D': 'join-10d',
-  '10E': 'join-10e',
+// Rotation order as shown on the physical building schedule.
+// Confirmed anchor: 2024-W44 = 10F (index 0), repeating every 9 families.
+const ROTATION: string[] = ['10F', '12F', '12E', '12D', '12B', '10A', '10B', '10D', '10E']
+
+// The schedule resets to 10F at week 1 every year (confirmed from physical building notice).
+const YEAR_OFFSET = 0
+
+function familyForWeek(week: number): string {
+  return ROTATION[(week - 1 + YEAR_OFFSET) % ROTATION.length]
 }
 
+// Families in rotation order (order field reflects true rotation sequence)
+const families = [
+  { name: '10F', joinCode: 'join-10f', order: 1, email: '10f@example.com' },
+  { name: '12F', joinCode: 'join-12f', order: 2, email: '12f@example.com' },
+  { name: '12E', joinCode: 'join-12e', order: 3, email: '12e@example.com' },
+  { name: '12D', joinCode: 'join-12d', order: 4, email: '12d@example.com' },
+  { name: '12B', joinCode: 'join-12b', order: 5, email: '12b@example.com' },
+  { name: '10A', joinCode: 'join-10a', order: 6, email: '10a@example.com' },
+  { name: '10B', joinCode: 'join-10b', order: 7, email: '10b@example.com' },
+  { name: '10D', joinCode: 'join-10d', order: 8, email: '10d@example.com' },
+  { name: '10E', joinCode: 'join-10e', order: 9, email: '10e@example.com' },
+]
+
 async function main() {
-  console.log('🌱 Starting seeding...')
-  const count = await prisma.weekAssignment.count()
+  console.log('🌱 Starting seed...')
+  console.log(`Year: ${YEAR}, offset: ${YEAR_OFFSET} (W1 = ${familyForWeek(1)})`)
 
-  if (count === 0) {
-    // Seed data if the table is empty
-    console.log('Seeding database with initial data...')
-
-    for (const [i, entry] of scheduleData.entries()) {
-      // Ensure family exists
-      let family = await prisma.family.findFirst({
-        where: { name: entry.family },
-      })
-
-      if (!family) {
-        family = await prisma.family.create({
-          data: {
-            name: entry.family,
-            email: entry.email || `${entry.family.toLowerCase()}@example.com`,
-            phone: '+1234567890',
-            order: 0,
-            joinCode:
-              joinCodes[entry.family] || `code-${entry.family.toLowerCase()}`,
-          },
-        })
-      }
-
-      // Create the assignment
-      await prisma.weekAssignment.create({
-        data: {
-          week: entry.week,
-          familyId: family.id,
-        },
-      })
-    }
-    console.log('✅ Seed completed!')
-  } else {
-    console.log('💥 Database already contains data.')
+  // Upsert families
+  const familyMap: Record<string, string> = {}
+  for (const f of families) {
+    const family = await prisma.family.upsert({
+      where: { joinCode: f.joinCode },
+      update: { order: f.order },
+      create: { name: f.name, joinCode: f.joinCode, order: f.order, email: f.email, phone: '' },
+    })
+    familyMap[f.name] = family.id
   }
+  console.log(`✅ ${families.length} families upserted`)
+
+  // Seed all 52 weeks
+  let seeded = 0
+  for (let week = 1; week <= 52; week++) {
+    const name = familyForWeek(week)
+    await prisma.weekAssignment.upsert({
+      where: { week_year: { week, year: YEAR } },
+      update: { familyId: familyMap[name] }, // update so re-running fixes wrong assignments
+      create: { week, year: YEAR, familyId: familyMap[name] },
+    })
+    seeded++
+  }
+
+  // Spot-check log for the first few weeks
+  console.log('Spot-check (first 9 weeks):')
+  for (let w = 1; w <= 9; w++) {
+    console.log(`  W${w}: ${familyForWeek(w)}`)
+  }
+  console.log(`✅ ${seeded} week assignments seeded for ${YEAR}`)
+
+  // Seed admin user (emailVerified set so NextAuth treats it as a valid account)
+  await prisma.user.upsert({
+    where: { email: 'admin@binbuddy.com' },
+    update: { isAdmin: true },
+    create: {
+      email: 'admin@binbuddy.com',
+      name: 'Admin',
+      isAdmin: true,
+      emailVerified: new Date(),
+    },
+  })
+  console.log('✅ Admin user seeded (admin@binbuddy.com)')
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .catch((e) => { console.error('❌ Seed failed:', e); process.exit(1) })
+  .finally(() => prisma.$disconnect())

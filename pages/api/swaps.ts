@@ -1,70 +1,102 @@
-// pages/api/swaps.ts (changed from swap.ts)
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from './auth/[...nextauth]'
 import { prisma } from '../../prisma/client'
-import { getSwedishWeekNumber } from '../../utils/schedule'
+import { getISOWeek, getISOWeekYear } from '../../utils/isoWeek'
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
-) {
-  const currentWeek = getSwedishWeekNumber(new Date())
+): Promise<void> {
+  const now = new Date()
+  const currentWeek = getISOWeek(now)
+  const currentYear = getISOWeekYear(now)
 
-  // Handle GET request to fetch swaps for a specific week
+  // --- GET: fetch swaps (year required; week optional) ---
   if (req.method === 'GET') {
-    const { week } = req.query
-
-    // If no week is passed in the query string, use the current week
-    const weekNumber = week ? Number(week) : currentWeek
+    const { week, year } = req.query
+    const yearNumber = year ? Number(year) : currentYear
 
     try {
       const swaps = await prisma.swap.findMany({
-        where: { weekNumber },
-        include: {
-          fromFamily: true,
-          toFamily: true,
+        where: {
+          year: yearNumber,
+          ...(week ? { weekNumber: Number(week) } : {}),
         },
+        include: { fromFamily: true, toFamily: true },
+        orderBy: { weekNumber: 'asc' },
       })
-      return res.status(200).json(swaps)
-    } catch (error) {
-      console.error('Error fetching swaps:', error)
-      return res.status(500).json({ error: 'Failed to fetch swaps' })
+      return void res.status(200).json({ success: true, data: swaps })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[swaps GET]', message)
+      return void res.status(500).json({ success: false, error: message })
     }
   }
 
-  // Handle POST request to create a new swap
+  // Mutating routes require authentication
+  const session = await getServerSession(req, res, authOptions)
+  if (!session?.user?.id) {
+    return void res.status(401).json({ success: false, error: 'Unauthorized' })
+  }
+
+  // --- POST: create a new swap request ---
   if (req.method === 'POST') {
-    const { fromFamilyId, toFamilyId } = req.body
+    const { fromFamilyId, toFamilyId, weekNumber, year } = req.body as {
+      fromFamilyId?: string
+      toFamilyId?: string
+      weekNumber?: number
+      year?: number
+    }
+
+    if (!fromFamilyId || !toFamilyId) {
+      return void res
+        .status(400)
+        .json({ success: false, error: 'fromFamilyId and toFamilyId are required' })
+    }
+
     try {
       const swap = await prisma.swap.create({
         data: {
-          weekNumber: currentWeek + 1, // Only allow swaps for next week
+          weekNumber: weekNumber ?? currentWeek + 1,
+          year: year ?? currentYear,
           fromFamilyId,
           toFamilyId,
           status: 'PENDING',
         },
+        include: { fromFamily: true, toFamily: true },
       })
-      return res.status(201).json(swap)
-    } catch (error) {
-      console.error('Error creating swap:', error)
-      return res.status(500).json({ error: 'Failed to create swap request' })
+      return void res.status(201).json({ success: true, data: swap })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[swaps POST]', message)
+      return void res.status(500).json({ success: false, error: message })
     }
   }
 
-  // Handle PATCH request to update swap status
+  // --- PATCH: approve or reject ---
   if (req.method === 'PATCH') {
-    const { swapId, status } = req.body
+    const { swapId, status } = req.body as { swapId?: string; status?: string }
+
+    if (!swapId || !['APPROVED', 'REJECTED'].includes(status ?? '')) {
+      return void res
+        .status(400)
+        .json({ success: false, error: 'swapId and valid status (APPROVED|REJECTED) required' })
+    }
+
     try {
       const swap = await prisma.swap.update({
         where: { id: swapId },
         data: { status },
+        include: { fromFamily: true, toFamily: true },
       })
-      return res.status(200).json(swap)
-    } catch (error) {
-      console.error('Error updating swap:', error)
-      return res.status(500).json({ error: 'Failed to update swap status' })
+      return void res.status(200).json({ success: true, data: swap })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[swaps PATCH]', message)
+      return void res.status(500).json({ success: false, error: message })
     }
   }
 
-  // Method Not Allowed for other HTTP methods
   res.status(405).end()
 }

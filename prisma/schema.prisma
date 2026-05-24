@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // ✅ uses .env.local
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -13,44 +13,67 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  isAdmin       Boolean   @default(false)
   familyId      String?   @unique
-  Family        Family?   @relation(fields: [familyId], references: [id])
+  family        Family?   @relation(fields: [familyId], references: [id])
+  accounts      Account[]
   sessions      Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
 }
 
 model Family {
   id          String           @id @default(cuid())
   name        String
-  email       String           
+  email       String
   joinCode    String           @unique
   phone       String
   order       Int
-  User        User?
+  user        User?
   assignments WeekAssignment[]
-  // Two sides of the relation to Swap model
   swapsFrom   Swap[]           @relation("SwapFrom")
   swapsTo     Swap[]           @relation("SwapTo")
 }
 
-model Swap {
-  id           String @id @default(cuid())
-  weekNumber   Int
-  fromFamilyId String
-  toFamilyId   String
-
-  fromFamily Family @relation("SwapFrom", fields: [fromFamilyId], references: [id])
-  toFamily   Family @relation("SwapTo", fields: [toFamilyId], references: [id])
-
-  status    String   @default("PENDING")
-  createdAt DateTime @default(now())
-}
-
+// week = ISO week number (1–52); year added so the schedule can span multiple years
 model WeekAssignment {
   id        String   @id @default(cuid())
-  week      Int      @unique
+  week      Int
+  year      Int      @default(2026)
   familyId  String
   family    Family   @relation(fields: [familyId], references: [id])
   createdAt DateTime @default(now())
+
+  @@unique([week, year])
+}
+
+model Swap {
+  id           String   @id @default(cuid())
+  weekNumber   Int
+  year         Int      @default(2026)
+  fromFamilyId String
+  toFamilyId   String
+  fromFamily   Family   @relation("SwapFrom", fields: [fromFamilyId], references: [id])
+  toFamily     Family   @relation("SwapTo", fields: [toFamilyId], references: [id])
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Session {
@@ -58,7 +81,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
