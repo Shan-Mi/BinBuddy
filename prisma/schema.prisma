@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -64,16 +65,17 @@ model WeekAssignment {
 }
 
 model Swap {
-  id           String   @id @default(cuid())
-  weekNumber   Int
-  year         Int      @default(2026)
-  fromFamilyId String
-  toFamilyId   String
-  fromFamily   Family   @relation("SwapFrom", fields: [fromFamilyId], references: [id])
-  toFamily     Family   @relation("SwapTo", fields: [toFamilyId], references: [id])
-  status       String   @default("PENDING")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  weekNumber     Int
+  toWeekNumber   Int      @default(0)
+  year           Int      @default(2026)
+  fromFamilyId   String
+  toFamilyId     String
+  fromFamily     Family   @relation("SwapFrom", fields: [fromFamilyId], references: [id])
+  toFamily       Family   @relation("SwapTo", fields: [toFamilyId], references: [id])
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Session {

@@ -42,23 +42,25 @@ export default async function handler(
 
   // --- POST: create a new swap request ---
   if (req.method === 'POST') {
-    const { fromFamilyId, toFamilyId, weekNumber, year } = req.body as {
+    const { fromFamilyId, toFamilyId, weekNumber, toWeekNumber, year } = req.body as {
       fromFamilyId?: string
       toFamilyId?: string
       weekNumber?: number
+      toWeekNumber?: number
       year?: number
     }
 
-    if (!fromFamilyId || !toFamilyId) {
+    if (!fromFamilyId || !toFamilyId || !weekNumber || !toWeekNumber) {
       return void res
         .status(400)
-        .json({ success: false, error: 'fromFamilyId and toFamilyId are required' })
+        .json({ success: false, error: 'fromFamilyId, toFamilyId, weekNumber, and toWeekNumber are required' })
     }
 
     try {
       const swap = await prisma.swap.create({
         data: {
-          weekNumber: weekNumber ?? currentWeek + 1,
+          weekNumber,
+          toWeekNumber,
           year: year ?? currentYear,
           fromFamilyId,
           toFamilyId,
@@ -85,9 +87,37 @@ export default async function handler(
     }
 
     try {
-      const swap = await prisma.swap.update({
+      const existing = await prisma.swap.findUnique({ where: { id: swapId } })
+      if (!existing) {
+        return void res.status(404).json({ success: false, error: 'Swap not found' })
+      }
+
+      if (status === 'APPROVED') {
+        // Swap the two WeekAssignment rows inside a transaction
+        const [fromRow, toRow] = await Promise.all([
+          prisma.weekAssignment.findFirst({
+            where: { week: existing.weekNumber, year: existing.year, familyId: existing.fromFamilyId },
+          }),
+          prisma.weekAssignment.findFirst({
+            where: { week: existing.toWeekNumber, year: existing.year, familyId: existing.toFamilyId },
+          }),
+        ])
+
+        if (!fromRow || !toRow) {
+          return void res.status(400).json({ success: false, error: 'Could not find matching schedule rows to swap' })
+        }
+
+        await prisma.$transaction([
+          prisma.weekAssignment.update({ where: { id: fromRow.id }, data: { familyId: existing.toFamilyId } }),
+          prisma.weekAssignment.update({ where: { id: toRow.id }, data: { familyId: existing.fromFamilyId } }),
+          prisma.swap.update({ where: { id: swapId }, data: { status: 'APPROVED' } }),
+        ])
+      } else {
+        await prisma.swap.update({ where: { id: swapId }, data: { status } })
+      }
+
+      const swap = await prisma.swap.findUnique({
         where: { id: swapId },
-        data: { status },
         include: { fromFamily: true, toFamily: true },
       })
       return void res.status(200).json({ success: true, data: swap })

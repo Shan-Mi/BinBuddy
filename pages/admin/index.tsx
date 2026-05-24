@@ -156,6 +156,23 @@ export default function AdminFamiliesPage({ initialFamilies }: Props) {
     }
   }
 
+  // ── Unlink member ──────────────────────────────────────────────────────────
+
+  const handleUnlink = async (userId: string, familyName: string) => {
+    const res = await fetch('/api/leave-family', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    })
+    const json = await res.json()
+    if (json.success) {
+      toast(`Member unlinked from ${familyName}`)
+      await refreshFamilies()
+    } else {
+      toast(json.error ?? 'Failed to unlink', 'error')
+    }
+  }
+
   // ── Regenerate schedule ────────────────────────────────────────────────────
 
   const handleRegenerate = async () => {
@@ -277,6 +294,15 @@ export default function AdminFamiliesPage({ initialFamilies }: Props) {
                         <Typography variant="caption" color="text.secondary">
                           {f.user.name ?? f.user.email}
                         </Typography>
+                        <Tooltip title="Unlink member">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleUnlink(f.user!.id, f.name)}
+                            sx={{ ml: 0.5 }}
+                          >
+                            <UserX size={13} color="#bbb" />
+                          </IconButton>
+                        </Tooltip>
                       </Box>
                     ) : (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>

@@ -28,6 +28,7 @@ export default async function handler(
       family: {
         id: a.family.id,
         name: a.family.name,
+        email: a.family.email,
         order: a.family.order,
       },
       isCurrent: a.week === currentWeek,

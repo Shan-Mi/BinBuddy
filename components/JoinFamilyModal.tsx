@@ -38,10 +38,10 @@ export default function JoinFamilyModal({ open, onClose, onJoined }: Props) {
         setCode('')
         onJoined(json.data.familyName)
       } else {
-        setError(json.error ?? 'Failed to join family')
+        setError(json.error ?? 'Kunde inte gå med i gruppen')
       }
     } catch {
-      setError('Network error — please try again')
+      setError('Nätverksfel – försök igen')
     } finally {
       setLoading(false)
     }
@@ -55,20 +55,20 @@ export default function JoinFamilyModal({ open, onClose, onJoined }: Props) {
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Join Your Family Group</DialogTitle>
+      <DialogTitle>Gå med i din grupp</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" mb={2}>
-          Enter the join code you received from your neighbourhood coordinator.
+          Ange koden du fått av din kontaktperson.
         </Typography>
         <TextField
           autoFocus
           fullWidth
-          label="Join Code"
+          label="Grupkod"
           variant="outlined"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-          placeholder="e.g. join-10a"
+          placeholder="t.ex. join-10a"
         />
         {error && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -78,7 +78,7 @@ export default function JoinFamilyModal({ open, onClose, onJoined }: Props) {
       </DialogContent>
       <DialogActions sx={{ p: 2, pt: 0 }}>
         <Button onClick={handleClose} color="inherit">
-          Cancel
+          Avbryt
         </Button>
         <Button
           variant="contained"
@@ -86,7 +86,7 @@ export default function JoinFamilyModal({ open, onClose, onJoined }: Props) {
           disabled={loading || !code.trim()}
           startIcon={loading ? <CircularProgress size={16} color="inherit" /> : null}
         >
-          Join
+          Gå med
         </Button>
       </DialogActions>
     </Dialog>
