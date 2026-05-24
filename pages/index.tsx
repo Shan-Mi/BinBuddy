@@ -88,6 +88,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [joinOpen, setJoinOpen] = useState(false)
   const [snack, setSnack] = useState<Snack | null>(null)
+  const [heroSticky, setHeroSticky] = useState(false)
+  const heroCardRef = useRef<HTMLDivElement | null>(null)
 
   const now = new Date()
   const currentWeek = getISOWeek(now)
@@ -125,6 +127,18 @@ export default function Dashboard() {
         block: 'center',
       })
     }
+  }, [loading])
+
+  // Show slim sticky banner when the hero card scrolls out of view
+  useEffect(() => {
+    const el = heroCardRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setHeroSticky(!entry.isIntersecting),
+      { threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [loading])
 
   // ── Derived state ──────────────────────────────────────────────────────────
@@ -232,6 +246,21 @@ export default function Dashboard() {
       )
     } catch {
       setSnack({ msg: 'Network error', severity: 'error' })
+    }
+  }
+
+  const handleLeaveFamily = async () => {
+    const res = await fetch('/api/leave-family', { method: 'POST' })
+    const json = await res.json()
+    if (json.success) {
+      await updateSession()
+      setSnack({ msg: 'You have left your family group.', severity: 'success' })
+      await fetchData()
+    } else {
+      setSnack({
+        msg: json.error ?? 'Failed to leave family',
+        severity: 'error',
+      })
     }
   }
 
@@ -419,6 +448,19 @@ export default function Dashboard() {
                 </Button>
               )}
 
+              {session.user.familyId && !session.user.isAdmin && (
+                <Tooltip title="Leave your family">
+                  <Button
+                    variant="text"
+                    size="small"
+                    color="inherit"
+                    sx={{ mr: 0.5, fontSize: 12, color: 'text.secondary' }}
+                    onClick={handleLeaveFamily}>
+                    Leave Family
+                  </Button>
+                </Tooltip>
+              )}
+
               {session.user.isAdmin && (
                 <Link href="/admin" passHref legacyBehavior>
                   <Tooltip title="Admin">
@@ -453,18 +495,71 @@ export default function Dashboard() {
         </Toolbar>
       </AppBar>
 
+      {/* ── Slim sticky banner — visible only after hero card scrolls away ── */}
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 64,
+          zIndex: 1100,
+          background: 'linear-gradient(90deg, #e8f5e9 0%, #c8e6c9 100%)',
+          borderBottom: '1px solid #a5d6a7',
+          px: { xs: 2, md: 4 },
+          py: 0.75,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          overflow: 'hidden',
+          maxHeight: heroSticky && heroAssignment ? 48 : 0,
+          opacity: heroSticky && heroAssignment ? 1 : 0,
+          transition: 'max-height 0.25s ease, opacity 0.2s ease',
+          pointerEvents: heroSticky && heroAssignment ? 'auto' : 'none',
+        }}>
+        <Trash2 size={16} color="#388e3c" />
+        <Typography
+          variant="caption"
+          color="primary.dark"
+          fontWeight={600}
+          sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Week {heroAssignment?.weekNumber} · On duty
+        </Typography>
+        <Avatar
+          sx={{
+            bgcolor: 'primary.main',
+            width: 24,
+            height: 24,
+            fontSize: 10,
+            fontWeight: 700,
+          }}>
+          {heroAssignment ? familyInitial(heroAssignment.family.name) : ''}
+        </Avatar>
+        <Typography
+          variant="body2"
+          color="primary.dark"
+          fontWeight={700}
+          sx={{ flexGrow: 1 }}>
+          {heroAssignment?.family.name}
+        </Typography>
+        {session && heroAssignment && (
+          <Tooltip title="Send reminder email">
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handleSendReminder(heroAssignment)}>
+              <Bell size={15} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+
       <Container maxWidth="md" sx={{ py: 4 }}>
         {/* ── Hero card ── */}
         {heroAssignment && (
           <Card
+            ref={heroCardRef}
             sx={{
               mb: 3,
-              position: 'sticky',
-              top: { xs: 60, sm: 70 }, // AppBar height for mobile/desktop
-              zIndex: 10,
               background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
               border: '1px solid #a5d6a7',
-              boxShadow: 3,
             }}>
             <CardContent sx={{ p: 3 }}>
               <Typography
